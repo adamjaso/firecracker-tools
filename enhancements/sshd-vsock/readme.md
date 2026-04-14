@@ -51,7 +51,7 @@ Then stop and start the Firecracker VM.
 ## How Vsock connection works
 
 After connecting to the firecracker VSOCK `uds_path` UNIX socket, Firecracker expects a
-preliminary `CONNECT <GUEST_TCP_PORT>\n` text command to initiate the connection to VSOCK CID.
+preliminary `CONNECT <GUEST_CID>\n` text command to initiate the connection to VSOCK CID.
 CID is like a port number, essentially the VSOCK analog for TCP/UDP port. I used `guest_cid` of `22` so
 the text command was `CONNECT 22\n`.
 
