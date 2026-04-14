@@ -14,6 +14,7 @@ apk add \
     grep \
     curl \
     less \
+    socat \
     openssh \
     openssl \
     iproute2 \
