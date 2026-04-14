@@ -30,10 +30,13 @@ $(VMLINUX): $(LINUX_DIR)/vmlinux
 $(VMLINUX_CONF): $(LINUX_DIR)/.config $(VMLINUX)
 	cp -a $(<) $(@)
 
+menuconfig: $(LINUX_DIR)/.config
+	make -C $(LINUX_DIR) menuconfig
+
 build: $(ARTIFACTS)
 	# no-op
 
 clean:
 	rm -r $(ARTIFACTS)
 
-.PHONY: build clean
+.PHONY: build clean menuconfig

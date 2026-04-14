@@ -76,4 +76,7 @@ start-demo: $(FCCTL) $(FIRECRACKER)
 stop-demo: $(FCCTL)
 	$(FCCTL) vm $(VM) stop
 
+edit-demo: $(FCCTL)
+	$(FCCTL) vm $(VM)
+
 .PHONY: $(TARGETS) init-demo start-demo

@@ -24,7 +24,7 @@ Depending on your system, you may need to install some of these packages.
 
 - Firecracker
     - requires Rust compiler and the Rust package manager `cargo`
-    - may require `libseccomp`
+    - may require `libseccomp-devel` and other C library sources, depending on what you already have installed
 
 - Kernel
     - requires GCC
@@ -38,7 +38,7 @@ These may not be comprehensive, but consider this a heads up.
 
 ## Getting started
 
-You need to run this as root since 
+You need to run this as root since
 
 - `fcctl` creates directories in `/var/lib/firecracker` and uses `chroot`
 - `firecracker` uses KVM
