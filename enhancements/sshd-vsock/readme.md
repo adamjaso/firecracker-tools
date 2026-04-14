@@ -36,11 +36,23 @@ CONFIG_VIRTIO_VSOCKETS=y
 CONFIG_VIRTIO_VSOCKETS_COMMON=y
 ```
 
+If you are using the main `demo-alpine-3.23.3-openrc` config, you can edit the config from the
+repo root with `doas make edit-demo` and add this snippet to the VM configuration.
+
+```
+  "vsock": {
+    "guest_cid": 22,
+    "uds_path": "/var/run/firecracker/demo-alpine-3.23.3-openrc.vsock22.sock"
+  }
+```
+
+Then stop and start the Firecracker VM.
+
 ## How Vsock connection works
 
-Connecting to the guest from the host via the firecracker `uds_path` UNIX socket requires a
-preliminary `CONNECT <GUEST_TCP_PORT>\n` text command to initiate the connection to VSOCK CID
-(CID is a port number, essentially the VSOCK analog for TCP/UDP port). I used `guest_cid` of `22` so
+After connecting to the firecracker VSOCK `uds_path` UNIX socket, Firecracker expects a
+preliminary `CONNECT <GUEST_TCP_PORT>\n` text command to initiate the connection to VSOCK CID.
+CID is like a port number, essentially the VSOCK analog for TCP/UDP port. I used `guest_cid` of `22` so
 the text command was `CONNECT 22\n`.
 
 After initiating the `CONNECT`, then you can use the connection as a tunnel to any guest service that is
