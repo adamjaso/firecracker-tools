@@ -1,6 +1,9 @@
-Host firecracker-vsock
+Host *
     StrictHostKeyChecking no
     UserKnownHostsFile /dev/null
-    #ProxyCommand sh -c '(echo CONNECT 22; cat) | socat - UNIX-CONNECT:/var/run/firecracker/demo-alpine-3.23.3-openrc.vsock22.sock'
+
+Host firecracker-vsock
     ProxyCommand sh -c '(echo CONNECT 22; cat) | nc -U /var/run/firecracker/demo-alpine-3.23.3-openrc.vsock22.sock'
-    User root
+
+Host firecracker
+    Hostname 10.128.128.130

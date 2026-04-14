@@ -8,14 +8,35 @@ This Vsock is specified in the VM configuration file `--config-file`, under the
 
 This feature can be used by the host for guest management i.e. think [qemu-guest-agent][^3].
 
-## Rationale
+## TL;DR
 
 As I was browsing for ways to share a host directory with the guest, I encountered an article that mentioned
 "ssh over VSOCK". [^4] Which made me curious to see what could be done with the Firecracker Vsock feature.
 
 After some digging, I was able to get ssh over VSOCK working with my Firecracker VM.
 
-## How to
+I was also able to get `sshfs` working as well over VSOCK, but running a git clone from my host into the
+`sshfs` shared directory, seemed very slow, much slower than just doing `sshfs` over regular TCP,
+but perhaps there are other reasons for this.
+
+Either way, this was a useful demonstration of what kinds of things can be done with Firecracker Vsock.
+
+## Prep
+
+The host side needs `/dev/vhost-vsock` and kernel module `vhost_vsock` to be loaded (config `VHOST_VSOCK=m|y`).
+
+The guest side needs `/dev/vsock` and virtio vsockets enabled:
+
+```
+firecracker:~# gzip -dc /proc/config.gz | grep VSOCK
+CONFIG_VSOCKETS=y
+CONFIG_VSOCKETS_DIAG=y
+CONFIG_VSOCKETS_LOOPBACK=y
+CONFIG_VIRTIO_VSOCKETS=y
+CONFIG_VIRTIO_VSOCKETS_COMMON=y
+```
+
+## How Vsock connection works
 
 Connecting to the guest from the host via the firecracker `uds_path` UNIX socket requires a
 preliminary `CONNECT <GUEST_TCP_PORT>\n` text command to initiate the connection to VSOCK CID
@@ -32,7 +53,7 @@ ready to ssh from the host to the guest.
 
 Using `ProxyCommand sh -c '(echo CONNECT 22; cat) | nc -U /var/run/firecracker/demo-alpine-3.23.3-openrc.vsock22.sock'`
 with `ssh`, you initiate the connection to CID 22 with `echo`, and then read from stdin with `cat` and pipe it all to
-`nc` connected to the host side VSOCK UNIX socket.
+`nc` connected to the host side VSOCK UNIX socket. For reference, I used OpenBSD netcat.
 
 You may need to run `ssh` as root if the VSOCK is owned by root and your user is not authorized.
 
@@ -53,6 +74,26 @@ You may change this message by editing /etc/motd.
 
 firecracker:~#
 Connection to firecracker-vsock closed.
+```
+
+## SSHFS over VSOCK
+
+Assuming you have the `root` user configured with your key in `.ssh/authorized_keys`, and that you have
+created a directory `/root/repos`, the following command should use your `ssh-agent` to authenticate
+to the Firecracker VM over the VSOCK which is configured as a ProxyCommand in the provided [ssh_config](./ssh_config).
+
+```
+mkdir -p tmp
+doas sshfs -o IdentityAgent=$SSH_AUTH_SOCK -F $PWD/ssh_config root@firecracker-vsock:/root/repos ./tmp/
+```
+
+If you tweak the permissions on the VSOCK socket file, you can just run `ssh` as your non-root user.
+
+To do the same thing with SSHFS over TCP --
+
+```
+mkdir -p tmp
+sshfs -F $PWD/ssh_config root@firecracker:/root/repos ./tmp/
 ```
 
 [^1]: https://github.com/firecracker-microvm/firecracker/blob/main/docs/vsock.md

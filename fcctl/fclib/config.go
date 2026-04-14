@@ -47,7 +47,7 @@ type (
 
 func InitConfdirs() error {
 	for _, dir := range dirs {
-		if err := os.MkdirAll(dir, 0o750); err != nil {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
 			return err
 		}
 	}
@@ -99,7 +99,7 @@ func (c *Conf) WriteVm(vm *models.FullVMConfiguration) error {
 	if err := c.CheckFile(); err != nil {
 		return err
 	}
-	out, err := os.OpenFile(c.File, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o640)
+	out, err := os.OpenFile(c.File, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o644)
 	if err != nil {
 		return err
 	}
