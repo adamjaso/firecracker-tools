@@ -134,6 +134,20 @@ func (c *Conf) Clean() error {
 	if err := cleanupFile(c.Log); err != nil {
 		return err
 	}
+	if vm, _ := c.ReadVm(); vm != nil {
+		if vm.Logger != nil && vm.Logger.LogPath != nil {
+			// cleanup log registered in vm config file
+			if err := cleanupFile(*vm.Logger.LogPath); err != nil {
+				return err
+			}
+		}
+		if vm.Vsock != nil && vm.Vsock.UdsPath != nil {
+			// cleanup vsock registered in vm config file
+			if err := cleanupFile(*vm.Vsock.UdsPath); err != nil {
+				return err
+			}
+		}
+	}
 	return nil
 }
 

@@ -87,8 +87,6 @@ CREATE_FLAGS
 }
 
 func (cmd *VmCommand) Exec(ctx context.Context) {
-	flag.Usage = showRunHelp
-	flag.Parse()
 	if len(flag.Args()) < 1 {
 		flag.Usage()
 	}
@@ -165,51 +163,4 @@ func (cmd *VmCommand) Install() {
 		showErr(err)
 	}
 	log.Printf("wrote config to %s\n", cmd.vm.File)
-}
-
-func showRunHelp() {
-	fmt.Fprintf(os.Stderr, "usage: %s COMMAND NAME [ARGS...]\n\nCOMMAND\n\tstart NAME\n\tstop NAME\n\tstatus NAME\n\tcurl NAME METHOD PATH\n\n", fclib.Progname)
-	flag.PrintDefaults()
-	os.Exit(1)
-}
-
-func StartVm(ctx context.Context, cmdF string) {
-	var (
-		nameF string
-		argsF []string
-	)
-	flag.Usage = showRunHelp
-	flag.Parse()
-	if len(flag.Args()) < 1 {
-		flag.Usage()
-	}
-	nameF = flag.Arg(0)
-	argsF = flag.Args()[1:]
-	c := fclib.New(nameF)
-
-	if cmdF == "start" {
-		_ = util.RunCommand(ctx, c.Sock, "stop")
-		if err := util.WaitUntilState(ctx, c.Sock, models.InstanceInfoStateNotStarted); err != nil {
-			showErr(err)
-		}
-		// try to cleanup
-		if err := c.Clean(); err != nil {
-			showErr(err)
-		}
-	}
-	if err := c.CheckSock(); err != nil {
-		if err := util.RunCommand(ctx, c.Sock, cmdF, argsF...); err != nil {
-			showErr(err)
-		}
-		return
-	}
-	// no socket, vm is probably not running
-
-	log.Printf("starting vm %q from %q\n", c.Name, c.File)
-	builder := c.GetVMCommandBuilder(fclib.FirecrackerBin)
-	cmd := builder.Build(ctx)
-	log.Printf("starting firecracker:\n\t%s\n", strings.Join(cmd.Args, " \\\n\t\t"))
-	if err := cmd.Run(); err != nil {
-		showErr(err)
-	}
 }
