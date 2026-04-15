@@ -1,3 +1,4 @@
 linux-*/
 linux-*.xz
 linux-*.vmlinux
+linux-*.config

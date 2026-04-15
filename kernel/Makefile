@@ -19,7 +19,7 @@ $(LINUX_DIR): $(LINUX_TAR)
 
 $(LINUX_DIR)/.config: $(LINUX_DIR)
 	cp -av $(LINUX_CONF) $(@)
-	make -C $(<) olddefconfig 
+	make -C $(<) olddefconfig menuconfig
 
 $(LINUX_DIR)/vmlinux: $(LINUX_DIR) $(LINUX_DIR)/.config
 	make -C $(<) -j$(shell nproc) vmlinux
