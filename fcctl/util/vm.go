@@ -11,7 +11,23 @@ import (
 	"github.com/firecracker-microvm/firecracker-go-sdk/client/models"
 )
 
+const (
+	// VHostUserDeviceTypes: https://docs.oasis-open.org/virtio/virtio/v1.3/csd01/virtio-v1.3-csd01.html#x1-1930005
+	VHostUserDeviceTypeVirtioSCSI = 8
+	VHostUserDeviceTypeVirtioFS   = 26
+)
+
 var ErrInvalidTapDevice = errors.New("invalid tap device")
+
+type (
+	VHostUserDevice struct {
+		ID         string `json:"id"`
+		DeviceType int    `json:"device_type"`
+		Socket     string `json:"socket"`
+		NumQueues  int    `json:"num_queues,omitempty"`
+		QueueSize  int    `json:"queue_size,omitempty"`
+	}
+)
 
 type (
 	VmOpts struct {
@@ -22,39 +38,60 @@ type (
 		KernelPath, InitrdPath, Cmdline string
 		MetricsPath                     string
 		EnableMMDS                      bool
+		VirtiofsID                      string
+		VirtiofsSock                    string
+	}
+	// VmConfFile represents a modified config file that supports the non-mainline virtiofsd feature
+	// The feature is tracked in https://github.com/firecracker-microvm/firecracker/pull/5773
+	// If/once the feature is merged, this can be refactored to just use FullVMConfiguration.
+	VmConfFile struct {
+		models.FullVMConfiguration
+		VHostUserDevices []VHostUserDevice `json:"vhost-user-devices,omitempty"`
 	}
 )
 
-func BuildVm(opts VmOpts) (*models.FullVMConfiguration, error) {
+func NewVirtiofsDevice(id, sock string) VHostUserDevice {
+	return VHostUserDevice{
+		ID:         id,
+		DeviceType: VHostUserDeviceTypeVirtioFS,
+		Socket:     sock,
+		NumQueues:  2,
+		QueueSize:  256,
+	}
+}
+
+func BuildVm(opts VmOpts) (*VmConfFile, error) {
 	if _, err := os.Stat(opts.DiskPath); err != nil {
 		return nil, fmt.Errorf("root disk not found: %w", err)
 	}
 	kernelF, _ := filepath.Abs(opts.KernelPath)
 	diskF, _ := filepath.Abs(opts.DiskPath)
 	logF, _ := filepath.Abs(opts.LogPath)
-	cfg := models.FullVMConfiguration{
-		BootSource: &models.BootSource{
-			KernelImagePath: &kernelF,
-			BootArgs:        opts.Cmdline,
-		},
-		Drives: []*models.Drive{
-			{
-				DriveID:      &diskF,
-				IsRootDevice: new(true),
-				IsReadOnly:   new(false),
-				PathOnHost:   &diskF,
-				IoEngine:     new("Sync"),
+	cfg := VmConfFile{
+		FullVMConfiguration: models.FullVMConfiguration{
+			BootSource: &models.BootSource{
+				KernelImagePath: &kernelF,
+				BootArgs:        opts.Cmdline,
 			},
-		},
-		Logger: &models.Logger{
-			Level:     new("Info"),
-			LogPath:   new(logF),
-			ShowLevel: new(true),
-		},
-		MachineConfig: &models.MachineConfiguration{
-			MemSizeMib: new(opts.Mem),
-			Smt:        new(true),
-			VcpuCount:  new(opts.Vcpu),
+			Drives: []*models.Drive{
+				{
+					DriveID:      &diskF,
+					IsRootDevice: new(true),
+					IsReadOnly:   new(false),
+					PathOnHost:   &diskF,
+					IoEngine:     new("Sync"),
+				},
+			},
+			Logger: &models.Logger{
+				Level:     new("Info"),
+				LogPath:   new(logF),
+				ShowLevel: new(true),
+			},
+			MachineConfig: &models.MachineConfiguration{
+				MemSizeMib: new(opts.Mem),
+				Smt:        new(true),
+				VcpuCount:  new(opts.Vcpu),
+			},
 		},
 	}
 	if opts.InitrdPath != "" {
@@ -86,6 +123,11 @@ func BuildVm(opts VmOpts) (*models.FullVMConfiguration, error) {
 	if opts.MetricsPath != "" {
 		cfg.Metrics = &models.Metrics{
 			MetricsPath: new(opts.MetricsPath),
+		}
+	}
+	if opts.VirtiofsID != "" && opts.VirtiofsSock != "" {
+		cfg.VHostUserDevices = []VHostUserDevice{
+			NewVirtiofsDevice(opts.VirtiofsID, opts.VirtiofsSock),
 		}
 	}
 	return &cfg, nil

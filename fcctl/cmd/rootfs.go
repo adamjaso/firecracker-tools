@@ -30,7 +30,7 @@ func (cmd *RootfsCommand) Parse() {
 }
 
 func (cmd *RootfsCommand) Exec(ctx context.Context) {
-	showErr(errUnknownCommand)
+	util.AssertNoErr(errUnknownCommand)
 }
 
 func (cmd *RootfsCommand) Edit() {
@@ -42,9 +42,7 @@ func (cmd *RootfsCommand) List() {
 }
 
 func (cmd *RootfsCommand) Install() {
-	if err := cmd.rootfs.CheckTarball(); err != nil {
-		showErr(err)
-	}
+	util.AssertNoErr(cmd.rootfs.CheckTarball())
 	installFiles := [][2]string{{cmd.fileF, cmd.rootfs.Tarball}}
 	installData(nil, installFiles, nil)
 	log.Printf("installed rootfs %q", cmd.nameF)

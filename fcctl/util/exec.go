@@ -3,6 +3,7 @@ package util
 import (
 	"context"
 	"fmt"
+	"log"
 	"os"
 	"os/exec"
 )
@@ -23,4 +24,19 @@ func ExecCommands(ctx context.Context, commands ...string) error {
 		}
 	}
 	return nil
+}
+
+func EditFile(fileF string) {
+	cmd := exec.Command(os.Getenv("EDITOR"), fileF)
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	AssertNoErr(cmd.Run())
+}
+
+func AssertNoErr(err error) {
+	if err != nil {
+		log.Output(2, fmt.Sprintf("%v\n", err))
+		os.Exit(1)
+	}
 }

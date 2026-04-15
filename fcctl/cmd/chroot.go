@@ -6,6 +6,7 @@ import (
 	"log"
 
 	"fcctl/fclib"
+	"fcctl/util"
 )
 
 type (
@@ -32,14 +33,12 @@ func (cmd *ChrootCommand) Parse() {
 }
 
 func (cmd *ChrootCommand) Edit() {
-	editFile(cmd.chroot.Script)
+	util.EditFile(cmd.chroot.Script)
 }
 
 func (cmd *ChrootCommand) Exec(ctx context.Context) {
 	rootfs := fclib.NewRootfs(cmd.rootfsF)
-	if err := fclib.ExecIntoChroot(ctx, cmd.chroot.Dir, rootfs.Tarball, cmd.chroot.Script); err != nil {
-		showErr(err)
-	}
+	util.AssertNoErr(fclib.ExecIntoChroot(ctx, cmd.chroot.Dir, rootfs.Tarball, cmd.chroot.Script))
 }
 
 func (cmd *ChrootCommand) List() {
@@ -47,9 +46,7 @@ func (cmd *ChrootCommand) List() {
 }
 
 func (cmd *ChrootCommand) Install() {
-	if err := cmd.chroot.CheckScript(); err != nil {
-		showErr(err)
-	}
+	util.AssertNoErr(cmd.chroot.CheckScript())
 	installDirs := []string{cmd.chroot.Dir}
 	installFiles := [][2]string{{cmd.scriptF, cmd.chroot.Script}}
 	installData(installDirs, installFiles, nil)

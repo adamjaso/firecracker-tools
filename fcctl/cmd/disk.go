@@ -6,6 +6,7 @@ import (
 	"log"
 
 	"fcctl/fclib"
+	"fcctl/util"
 )
 
 type (
@@ -18,11 +19,11 @@ type (
 )
 
 func (cmd *DiskCommand) Edit() {
-	showErr(errUnknownCommand)
+	util.AssertNoErr(errUnknownCommand)
 }
 
 func (cmd *DiskCommand) Exec(ctx context.Context) {
-	showErr(errUnknownCommand)
+	util.AssertNoErr(errUnknownCommand)
 }
 
 func (cmd *DiskCommand) List() {
@@ -42,14 +43,10 @@ func (cmd *DiskCommand) Parse() {
 
 func (cmd *DiskCommand) Install() {
 	d := fclib.NewDisk(cmd.nameF)
-	if err := d.CheckFile(); err != nil {
-		showErr(err)
-	}
+	util.AssertNoErr(d.CheckFile())
 	rfs := fclib.NewRootfs(cmd.rootfsF)
 	chr := fclib.NewChroot(cmd.chrootF)
 	ctx := context.Background()
-	if err := fclib.BuildDisk(ctx, *rfs, *chr, *d, cmd.sizeF); err != nil {
-		showErr(err)
-	}
+	util.AssertNoErr(fclib.BuildDisk(ctx, *rfs, *chr, *d, cmd.sizeF))
 	log.Printf("installed disk %q", cmd.nameF)
 }

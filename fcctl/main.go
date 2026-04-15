@@ -12,7 +12,7 @@ import (
 )
 
 func showHelp() {
-	fmt.Fprintf(os.Stderr, "usage: %s vm|kernel|chroot|rootfs|disk [flags]\n", fclib.Progname)
+	fmt.Fprintf(os.Stderr, "usage: %s rootfs|chroot|kernel|disk|share|vm [FLAGS]\n", fclib.Progname)
 	os.Exit(1)
 }
 
@@ -41,7 +41,6 @@ func main() {
 		showHelp()
 	}
 	_ = fclib.InitConfdirs()
-	fclib.Progname = os.Args[0]
 	action := os.Args[1]
 	os.Args = os.Args[1:]
 	var c cmd.Command
@@ -56,6 +55,8 @@ func main() {
 		c = &cmd.RootfsCommand{}
 	case "disk":
 		c = &cmd.DiskCommand{}
+	case "share":
+		c = &cmd.ShareCommand{}
 	default:
 		showHelp()
 	}
@@ -65,12 +66,13 @@ func main() {
 		return
 	}
 	c.Parse()
-	if flag.NArg() == 1 {
+	switch flag.NArg() {
+	case 0:
+		c.Install()
+	case 1:
 		c.Edit()
-	} else if flag.NArg() == 2 {
+	default:
 		ctx := context.Background()
 		c.Exec(ctx)
-	} else {
-		c.Install()
 	}
 }

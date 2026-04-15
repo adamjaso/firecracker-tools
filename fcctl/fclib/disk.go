@@ -15,5 +15,5 @@ func NewDisk(name string) *DiskConf {
 }
 
 func (c *DiskConf) CheckFile() error {
-	return checkFile(c.File, "disk image", ErrDiskExists, nil)
+	return checkFile(c.File, "disk image", ErrFileExists, nil)
 }

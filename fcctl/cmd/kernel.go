@@ -6,6 +6,7 @@ import (
 	"log"
 
 	"fcctl/fclib"
+	"fcctl/util"
 )
 
 type (
@@ -32,11 +33,11 @@ func (cmd *KernelCommand) Parse() {
 }
 
 func (cmd *KernelCommand) Edit() {
-	editFile(cmd.kernel.Config)
+	util.EditFile(cmd.kernel.Config)
 }
 
 func (cmd *KernelCommand) Exec(ctx context.Context) {
-	showErr(errUnknownCommand)
+	util.AssertNoErr(errUnknownCommand)
 }
 
 func (cmd *KernelCommand) List() {

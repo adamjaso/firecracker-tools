@@ -8,6 +8,7 @@ import (
 	"log"
 	"os"
 	"strings"
+	"sync"
 
 	"fcctl/fclib"
 	"fcctl/util"
@@ -24,6 +25,7 @@ type (
 		rootfsF string
 		diskF   string
 		sizeF   int
+		shareF  string
 		opts    util.VmOpts
 
 		cmdnameF string
@@ -48,6 +50,7 @@ func (cmd *VmCommand) Parse() {
 	flag.StringVar(&cmd.opts.Cmdline, "append", "rootfstype=ext4 rw console=ttyS0", "Kernel args to append")
 	flag.StringVar(&cmd.opts.MetricsPath, "metrics", "", "Metrics file path")
 	flag.BoolVar(&cmd.opts.EnableMMDS, "mmds", false, "Include MMDS config. Only valid with -tap-device")
+	flag.StringVar(&cmd.shareF, "share", "", "Include virtiofs shared directory config (vhost-user-device support required)")
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, `usage: %s vm [CREATE_FLAGS|NAME [COMMAND [ARGS...]]]
 
@@ -91,30 +94,38 @@ func (cmd *VmCommand) Exec(ctx context.Context) {
 		flag.Usage()
 	}
 	if cmd.cmdnameF == "start" {
-		_ = util.RunCommand(ctx, cmd.vm.Sock, "stop")
-		if err := util.WaitUntilState(ctx, cmd.vm.Sock, models.InstanceInfoStateNotStarted); err != nil {
-			showErr(err)
-		}
+		_ = util.RunFirecrackerCommand(ctx, cmd.vm.Sock, "stop")
+		util.AssertNoErr(util.WaitUntilState(ctx, cmd.vm.Sock, models.InstanceInfoStateNotStarted))
 		// try to cleanup
-		if err := cmd.vm.Clean(); err != nil {
-			showErr(err)
-		}
+		util.AssertNoErr(cmd.vm.Clean())
 	}
 	if err := cmd.vm.CheckSock(); err != nil {
-		if err := util.RunCommand(ctx, cmd.vm.Sock, cmd.cmdnameF, cmd.argsF...); err != nil {
-			showErr(err)
-		}
+		util.AssertNoErr(util.RunFirecrackerCommand(ctx, cmd.vm.Sock, cmd.cmdnameF, cmd.argsF...))
 		return
 	}
 	// no socket, vm is probably not running
 
-	log.Printf("starting vm %q from %q\n", cmd.vm.Name, cmd.vm.File)
-	builder := cmd.vm.GetVMCommandBuilder(fclib.FirecrackerBin)
-	b := builder.Build(ctx)
-	log.Printf("starting firecracker:\n\t%s\n", strings.Join(b.Args, " \\\n\t\t"))
-	if err := b.Run(); err != nil {
-		showErr(err)
+	wg := sync.WaitGroup{}
+	wg.Add(1) // one for firecracker
+	shares := cmd.vm.GetShares()
+	if len(shares) > 0 {
+		for i := range shares {
+			wg.Add(1)
+			go func(share *ShareCommand) {
+				share.StartVirtiofs(ctx, cmd.vm.Name)
+				wg.Done()
+			}(&ShareCommand{share: shares[i]})
+		}
 	}
+	go func() {
+		log.Printf("starting vm %q from %q\n", cmd.vm.Name, cmd.vm.File)
+		builder := cmd.vm.GetVMCommandBuilder(fclib.FirecrackerBin)
+		b := builder.Build(ctx)
+		log.Printf("starting firecracker:\n\t%s\n", strings.Join(b.Args, " \\\n\t\t"))
+		util.AssertNoErr(b.Run())
+		wg.Done()
+	}()
+	wg.Wait()
 }
 
 func (cmd *VmCommand) List() {
@@ -122,21 +133,19 @@ func (cmd *VmCommand) List() {
 }
 
 func (cmd *VmCommand) Edit() {
-	editFile(cmd.vm.File)
+	util.EditFile(cmd.vm.File)
 }
 
 func (cmd *VmCommand) Install() {
 	cmd.opts.LogPath = cmd.vm.Log
 	if cmd.kernelF != "" {
 		kernel := fclib.NewKernel(cmd.kernelF)
-		if err := kernel.CheckVmlinux(); err != nil {
-			showErr(err)
-		}
+		util.AssertNoErr(kernel.CheckVmlinux())
 		cmd.opts.KernelPath = kernel.Vmlinux
 		if err := kernel.CheckInitrd(); err == nil {
 			cmd.opts.InitrdPath = kernel.Initrd
 		} else if !errors.Is(err, fclib.ErrInitrdNotFound) {
-			showErr(err)
+			util.AssertNoErr(err)
 		}
 	}
 	if cmd.chrootF != "" && cmd.rootfsF != "" && cmd.diskF != "" {
@@ -144,23 +153,26 @@ func (cmd *VmCommand) Install() {
 		rootfs := fclib.NewRootfs(cmd.rootfsF)
 		disk := fclib.NewDisk(cmd.diskF)
 		ctx := context.Background()
-		if err := fclib.BuildDisk(ctx, *rootfs, *chroot, *disk, cmd.sizeF); err != nil {
-			showErr(err)
-		}
+		util.AssertNoErr(fclib.BuildDisk(ctx, *rootfs, *chroot, *disk, cmd.sizeF))
 	} else if cmd.diskF != "" {
 		cmd.opts.DiskPath = fclib.NewDisk(cmd.diskF).File
 	} else if cmd.rootF != "" {
 		cmd.opts.DiskPath = cmd.rootF
 	} else {
-		showErr(errors.New("disk not found"))
+		util.AssertNoErr(errors.New("disk not found"))
 	}
-
+	if cmd.shareF != "" {
+		log.Printf("WARNING! virtiofsd support is not yet a mainline firecracker feature. You will need to build Firecracker yourself from a fork that supports virtiofsd.")
+		share := fclib.NewShare(cmd.shareF)
+		cmd.opts.VirtiofsID = cmd.shareF
+		cmd.opts.VirtiofsSock, _ = share.GetSock(cmd.nameF, false)
+	}
 	if err := cmd.vm.CheckFile(); err != nil {
-		showErr(err)
+		util.AssertNoErr(err)
 	} else if vm, err := util.BuildVm(cmd.opts); err != nil {
-		showErr(err)
+		util.AssertNoErr(err)
 	} else if err := cmd.vm.WriteVm(vm); err != nil {
-		showErr(err)
+		util.AssertNoErr(err)
 	}
 	log.Printf("wrote config to %s\n", cmd.vm.File)
 }

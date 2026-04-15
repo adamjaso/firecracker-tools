@@ -72,7 +72,7 @@ func CallFirecracker(ctx context.Context, sockF string, req FcReq) error {
 	return nil
 }
 
-func RunCommand(ctx context.Context, sockF, command string, args ...string) error {
+func RunFirecrackerCommand(ctx context.Context, sockF, command string, args ...string) error {
 	var req FcReq
 	switch command {
 	case "stop":

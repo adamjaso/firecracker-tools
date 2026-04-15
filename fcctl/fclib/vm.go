@@ -6,14 +6,16 @@ import (
 	"fmt"
 	"os"
 
+	"fcctl/util"
+
 	"github.com/firecracker-microvm/firecracker-go-sdk"
-	"github.com/firecracker-microvm/firecracker-go-sdk/client/models"
 )
 
 const (
 	DefaultConfdir   = "/var/lib/firecracker/conf"
 	DefaultDiskdir   = "/var/lib/firecracker/disk"
 	DefaultKerneldir = "/var/lib/firecracker/kernel"
+	DefaultSharedir  = "/var/lib/firecracker/share"
 	DefaultLogdir    = "/var/log/firecracker"
 	DefaultRundir    = "/var/run/firecracker"
 )
@@ -23,6 +25,7 @@ var (
 		DefaultConfdir,
 		DefaultDiskdir,
 		DefaultKerneldir,
+		DefaultSharedir,
 		DefaultLogdir,
 		DefaultRundir,
 	}
@@ -33,15 +36,15 @@ var (
 	ErrInitrdNotFound = errors.New("initrd not found")
 	ErrRootfsExists   = errors.New("tarball exists")
 	ErrChrootExists   = errors.New("script exists")
-	ErrDiskExists     = errors.New("file exists")
+	ErrFileExists     = errors.New("file exists")
 )
 
 type (
 	Conf struct {
-		Name string
-		Sock string
-		Log  string
-		File string
+		Name string `json:"_name,omitempty"`
+		Sock string `json:"_sock,omitempty"`
+		Log  string `json:"_log,omitempty"`
+		File string `json:"-"`
 	}
 )
 
@@ -61,7 +64,7 @@ func checkFile(file, name string, existErr, notExistErr error) error {
 		}
 		return nil
 	} else if !os.IsNotExist(err) {
-		return err
+		return fmt.Errorf("%w: %s %s", err, name, file)
 	} else if notExistErr != nil {
 		return notExistErr
 	}
@@ -75,6 +78,18 @@ func New(name string) *Conf {
 		Log:  fmt.Sprintf("%s/%s.log", DefaultLogdir, name),
 		File: fmt.Sprintf("%s/%s.json", DefaultConfdir, name),
 	}
+}
+
+func (c *Conf) GetShares() []*ShareConf {
+	vm, _ := c.ReadVm()
+	shares := make([]*ShareConf, 0)
+	if vm == nil {
+		return shares
+	}
+	for _, dev := range vm.VHostUserDevices {
+		shares = append(shares, NewShare(dev.ID))
+	}
+	return shares
 }
 
 func (c *Conf) CheckFile() error {
@@ -92,10 +107,10 @@ func (c *Conf) GetVMCommandBuilder(firecrackerBin string) firecracker.VMCommandB
 		WithStdout(os.Stdout).
 		WithStderr(os.Stderr).
 		WithSocketPath(c.Sock).
-		WithArgs([]string{"--config-file", c.File, "--id", c.Name, "--log-path", c.Log})
+		WithArgs([]string{"--config-file", c.File, "--id", c.Name})
 }
 
-func (c *Conf) WriteVm(vm *models.FullVMConfiguration) error {
+func (c *Conf) WriteVm(vm *util.VmConfFile) error {
 	if err := c.CheckFile(); err != nil {
 		return err
 	}
@@ -112,13 +127,13 @@ func (c *Conf) WriteVm(vm *models.FullVMConfiguration) error {
 	return nil
 }
 
-func (c *Conf) ReadVm() (*models.FullVMConfiguration, error) {
+func (c *Conf) ReadVm() (*util.VmConfFile, error) {
 	f, err := os.Open(c.File)
 	if err != nil {
 		return nil, err
 	}
 	defer f.Close()
-	conf := &models.FullVMConfiguration{}
+	conf := &util.VmConfFile{}
 	if err := json.NewDecoder(f).Decode(conf); err != nil {
 		return nil, err
 	}
@@ -128,10 +143,6 @@ func (c *Conf) ReadVm() (*models.FullVMConfiguration, error) {
 func (c *Conf) Clean() error {
 	// try to cleanup socket
 	if err := cleanupFile(c.Sock); err != nil {
-		return err
-	}
-	// try to cleanup log
-	if err := cleanupFile(c.Log); err != nil {
 		return err
 	}
 	if vm, _ := c.ReadVm(); vm != nil {
@@ -152,7 +163,7 @@ func (c *Conf) Clean() error {
 }
 
 func cleanupFile(fname string) error {
-	if err := os.Remove(fname); err != nil {
+	if err := os.RemoveAll(fname); err != nil {
 		if !os.IsNotExist(err) {
 			return err
 		}
