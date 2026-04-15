@@ -1,8 +1,14 @@
 SHELL := /bin/bash
 
+ifdef ENABLE_VIRTIOFS
+FIRECRACKER_DIR ?= firecracker-with-virtiofsd
+FIRECRACKER_BIN = $(FIRECRACKER_DIR)/build/cargo_target/debug/firecracker
+FIRECRACKER_URL = https://github.com/adamjaso/firecracker-with-virtiofsd
+else
 FIRECRACKER_DIR ?= firecracker
 FIRECRACKER_BIN = $(FIRECRACKER_DIR)/build/cargo_target/debug/firecracker
 FIRECRACKER_URL = https://github.com/firecracker-microvm/firecracker
+endif
 
 $(FIRECRACKER_DIR):
 	git clone $(FIRECRACKER_URL) $(@)
