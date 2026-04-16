@@ -11,7 +11,11 @@ PROFILE ?= openrc
 TAP_DEV ?= tap0
 TAP_ADDR ?= 10.128.128.129/30
 
+ifdef ENABLE_VIRTIOFS
+FIRECRACKER = ./firecracker/firecracker-with-virtiofsd/build/cargo_target/debug/firecracker
+else
 FIRECRACKER = ./firecracker/firecracker/build/cargo_target/debug/firecracker
+endif
 FCCTL = ./fcctl/fcctl
 CHROOT = alpine-$(PROFILE)
 KERNEL = linux-$(KERNEL_VER)
@@ -67,11 +71,11 @@ $(VM_F): $(KERNEL_F) $(DISK_F) $(FCCTL)
 init-demo: $(VM_F)
 
 start-demo: $(FCCTL) $(FIRECRACKER)
-	ip tuntap add $(TAP_DEV) mode tap ||:
+	ip tuntap | grep -q $(TAP_DEV) || ip tuntap add $(TAP_DEV) mode tap
 	ip link set $(TAP_DEV) up
 	ip addr add $(TAP_ADDR) dev $(TAP_DEV) 2>/dev/null ||:
-	export FC_BIN=$(FIRECRACKER) && \
-		$(FCCTL) vm $(VM) start
+	@[ -f "$${FC_BIN}" ] || { echo "FC_BIN is not set, please source ./env.sh"; exit 1; }
+	$(FCCTL) vm $(VM) start
 
 stop-demo: $(FCCTL)
 	$(FCCTL) vm $(VM) stop

@@ -26,20 +26,15 @@ func NewShare(name string) *ShareConf {
 func (c *ShareConf) GetSock(sockid string, clean bool) (string, error) {
 	sock := fmt.Sprintf("%s/%s.%s.share.sock", DefaultRundir, c.Name, sockid)
 	if err := util.CheckUnixSocket(sock); err != nil {
-		if errors.Is(err, util.ErrSocket) {
-			if err := cleanupFile(sock); err != nil {
-				return sock, err
-			}
-			return sock, nil
+		if !errors.Is(err, util.ErrSocket) {
+			return sock, err
 		}
-	}
-	err := checkFile(sock, fmt.Sprintf("sharing %q with %q", c.Name, sockid), ErrFileExists, nil)
-	if clean && errors.Is(err, ErrFileExists) {
 		if err := cleanupFile(sock); err != nil {
 			return sock, err
 		}
+		return sock, nil
 	}
-	return sock, err
+	return sock, nil
 }
 
 func (c *ShareConf) GetVirtiofsDevice(sockid string) util.VHostUserDevice {
