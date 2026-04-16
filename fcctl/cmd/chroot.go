@@ -14,31 +14,26 @@ type (
 		nameF   string
 		scriptF string
 		rootfsF string
-		chroot  *fclib.ChrootConf
 	}
 )
 
 func (cmd *ChrootCommand) Parse() {
-	if flag.NArg() == 0 {
-		flag.StringVar(&cmd.nameF, "N", "", "Installed chroot name")
-		flag.StringVar(&cmd.scriptF, "f", "", "Installed chroot script")
-	} else {
-		flag.StringVar(&cmd.rootfsF, "rootfs", "", "Rootfs name")
-	}
+	flag.StringVar(&cmd.nameF, "N", "", "Installed chroot name")
+	flag.StringVar(&cmd.scriptF, "f", "", "Installed chroot script")
 	flag.Parse()
 	if name := flag.Arg(0); name != "" {
 		cmd.nameF = name
 	}
-	cmd.chroot = fclib.NewChroot(cmd.nameF)
 }
 
 func (cmd *ChrootCommand) Edit() {
-	util.EditFile(cmd.chroot.Script)
+	util.EditFile(fclib.NewChroot(cmd.nameF).Script)
 }
 
 func (cmd *ChrootCommand) Exec(ctx context.Context) {
+	chroot := fclib.NewChroot(cmd.nameF)
 	rootfs := fclib.NewRootfs(cmd.rootfsF)
-	util.AssertNoErr(fclib.ExecIntoChroot(ctx, cmd.chroot.Dir, rootfs.Tarball, cmd.chroot.Script))
+	util.AssertNoErr(fclib.ExecIntoChroot(ctx, chroot.Dir, rootfs.Tarball, chroot.Script))
 }
 
 func (cmd *ChrootCommand) List() {
@@ -46,9 +41,10 @@ func (cmd *ChrootCommand) List() {
 }
 
 func (cmd *ChrootCommand) Install() {
-	util.AssertNoErr(cmd.chroot.CheckScript())
-	installDirs := []string{cmd.chroot.Dir}
-	installFiles := [][2]string{{cmd.scriptF, cmd.chroot.Script}}
+	chroot := fclib.NewChroot(cmd.nameF)
+	util.AssertNoErr(chroot.CheckScript())
+	installDirs := []string{chroot.Dir}
+	installFiles := [][2]string{{cmd.scriptF, chroot.Script}}
 	installData(installDirs, installFiles, nil)
 	log.Printf("installed chroot script %q", cmd.nameF)
 }

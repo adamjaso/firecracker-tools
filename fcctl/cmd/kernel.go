@@ -22,18 +22,17 @@ type (
 
 func (cmd *KernelCommand) Parse() {
 	flag.StringVar(&cmd.nameF, "N", "", "Installed kernel name")
-	flag.StringVar(&cmd.kernelF, "kernel", "", "Install kernel vmlinux")
-	flag.StringVar(&cmd.initrdF, "initrd", "", "Install initrd/initramfs (optional)")
-	flag.StringVar(&cmd.configF, "config", "", "Installed kernel config (optional)")
+	flag.StringVar(&cmd.kernelF, "f", "", "Install kernel vmlinux")
+	flag.StringVar(&cmd.initrdF, "i", "", "Install initrd/initramfs (optional)")
+	flag.StringVar(&cmd.configF, "c", "", "Installed kernel config (optional)")
 	flag.Parse()
 	if name := flag.Arg(0); name != "" {
 		cmd.nameF = name
 	}
-	cmd.kernel = fclib.NewKernel(cmd.nameF)
 }
 
 func (cmd *KernelCommand) Edit() {
-	util.EditFile(cmd.kernel.Config)
+	util.EditFile(fclib.NewKernel(cmd.nameF).Config)
 }
 
 func (cmd *KernelCommand) Exec(ctx context.Context) {
@@ -45,11 +44,13 @@ func (cmd *KernelCommand) List() {
 }
 
 func (cmd *KernelCommand) Install() {
+	kernel := fclib.NewKernel(cmd.nameF)
+	util.AssertNoErr(kernel.CheckVmlinux())
 	installFiles := [][2]string{
-		{cmd.kernelF, cmd.kernel.Vmlinux},
+		{cmd.kernelF, kernel.Vmlinux},
 	}
 	if cmd.initrdF != "" {
-		installFiles = append(installFiles, [2]string{cmd.initrdF, cmd.kernel.Initrd})
+		installFiles = append(installFiles, [2]string{cmd.initrdF, kernel.Initrd})
 	}
 	installData(nil, installFiles, nil)
 	log.Printf("installed kernel %q", cmd.nameF)

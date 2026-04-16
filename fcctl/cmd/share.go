@@ -16,8 +16,6 @@ type (
 		nameF   string
 		sockidF string
 		cmdF    string
-
-		share *fclib.ShareConf
 	}
 )
 
@@ -30,12 +28,12 @@ func (cmd *ShareCommand) Parse() {
 	if sockidF := flag.Arg(1); sockidF != "" {
 		cmd.sockidF = sockidF
 	}
-	cmd.share = fclib.NewShare(cmd.nameF)
 }
 
 func (cmd *ShareCommand) Edit() {
-	log.Printf("entering share %q directory %s...", cmd.share.Name, cmd.share.Dir)
-	_ = util.ExecCommand(context.Background(), fmt.Sprintf("cd %s && env PS1=\"[%s] $PS1\" bash", cmd.share.Dir, cmd.share.Name))
+	share := fclib.NewShare(cmd.nameF)
+	log.Printf("entering share %q directory %s...", share.Name, share.Dir)
+	_ = util.ExecCommand(context.Background(), fmt.Sprintf("cd %s && env PS1=\"[%s] $PS1\" bash", share.Dir, share.Name))
 }
 
 func (cmd *ShareCommand) List() {
@@ -43,21 +41,24 @@ func (cmd *ShareCommand) List() {
 }
 
 func (cmd *ShareCommand) Install() {
-	util.AssertNoErr(cmd.share.CheckDir())
-	util.AssertNoErr(os.MkdirAll(cmd.share.Dir, 0o755))
-	log.Printf("installed share %s", cmd.share.Dir)
+	share := fclib.NewShare(cmd.nameF)
+	util.AssertNoErr(share.CheckDir())
+	util.AssertNoErr(os.MkdirAll(share.Dir, 0o755))
+	log.Printf("installed share %s", share.Dir)
 }
 
 func (cmd *ShareCommand) StartVirtiofs(ctx context.Context, sockidF string) {
-	log.Printf("starting virtiofsd for %q...", cmd.share.Name)
-	util.AssertNoErr(cmd.share.Exec(ctx, sockidF, false))
-	log.Printf("exited virtiofsd for %q", cmd.share.Name)
+	share := fclib.NewShare(cmd.nameF)
+	log.Printf("starting virtiofsd for %q...", share.Name)
+	util.AssertNoErr(share.Exec(ctx, sockidF, false))
+	log.Printf("exited virtiofsd for %q", share.Name)
 }
 
 func (cmd *ShareCommand) Exec(ctx context.Context) {
+	share := fclib.NewShare(cmd.nameF)
 	switch flag.Arg(2) {
 	case "clean":
-		_, err := cmd.share.GetSock(cmd.sockidF, true)
+		_, err := share.GetSock(cmd.sockidF, true)
 		util.AssertNoErr(err)
 	default:
 		cmd.StartVirtiofs(ctx, cmd.sockidF)

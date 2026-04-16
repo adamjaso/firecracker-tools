@@ -8,6 +8,13 @@ import (
 	"os/exec"
 )
 
+func StartCommand(ctx context.Context, command string) (*exec.Cmd, error) {
+	cmd := exec.CommandContext(ctx, "sh", "-xec", command)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd, cmd.Start()
+}
+
 func ExecCommand(ctx context.Context, command string) error {
 	cmd := exec.CommandContext(ctx, "sh", "-xec", command)
 	cmd.Stdin = os.Stdin

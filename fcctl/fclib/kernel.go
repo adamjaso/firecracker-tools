@@ -20,10 +20,14 @@ func NewKernel(name string) *KernelConf {
 	}
 }
 
-func (k *KernelConf) CheckInitrd() error {
+func (k *KernelConf) CheckVmlinux() error {
+	return checkFile(k.Vmlinux, "vmlinux", ErrKernelExists, nil)
+}
+
+func (k *KernelConf) HasInitrd() error {
 	return checkFile(k.Initrd, "initrd", nil, ErrInitrdNotFound)
 }
 
-func (k *KernelConf) CheckVmlinux() error {
+func (k *KernelConf) HasVmlinux() error {
 	return checkFile(k.Vmlinux, "vmlinux", nil, ErrKernelNotFound)
 }

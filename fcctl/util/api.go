@@ -36,6 +36,26 @@ type FcReq struct {
 	Res    any
 }
 
+func CheckUnixSocket(sockF string) error {
+	s, err := os.Stat(sockF)
+	if err != nil {
+		return fmt.Errorf("%w: %s not found", ErrSocket, sockF)
+	} else if s.Mode()|os.ModeSocket == 0 {
+		return fmt.Errorf("%w: %s not a socket", ErrSocket, sockF)
+	}
+	conn, err := net.Dial("unix", sockF)
+	if err != nil {
+		if os.IsPermission(err) {
+			return err
+		}
+		// socket is not open
+		return fmt.Errorf("%w: open error %v", ErrSocket, err)
+	}
+	_ = conn.Close()
+	// socket open
+	return nil
+}
+
 func CallFirecracker(ctx context.Context, sockF string, req FcReq) error {
 	conn, err := net.Dial("unix", sockF)
 	if err != nil {

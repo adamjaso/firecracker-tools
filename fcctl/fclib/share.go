@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os/exec"
 
 	"fcctl/util"
 )
@@ -24,6 +25,14 @@ func NewShare(name string) *ShareConf {
 
 func (c *ShareConf) GetSock(sockid string, clean bool) (string, error) {
 	sock := fmt.Sprintf("%s/%s.%s.share.sock", DefaultRundir, c.Name, sockid)
+	if err := util.CheckUnixSocket(sock); err != nil {
+		if errors.Is(err, util.ErrSocket) {
+			if err := cleanupFile(sock); err != nil {
+				return sock, err
+			}
+			return sock, nil
+		}
+	}
 	err := checkFile(sock, fmt.Sprintf("sharing %q with %q", c.Name, sockid), ErrFileExists, nil)
 	if clean && errors.Is(err, ErrFileExists) {
 		if err := cleanupFile(sock); err != nil {
@@ -45,8 +54,20 @@ func (c *ShareConf) CheckDir() error {
 func (c *ShareConf) Exec(ctx context.Context, sockid string, clean bool) error {
 	if sock, err := c.GetSock(sockid, clean); err != nil {
 		return err
-	} else if err := util.RunVirtiofsd(ctx, "", sock, c.Name, c.Dir, ""); err != nil {
+	} else if cmd, err := util.StartVirtiofsd(ctx, "", sock, c.Name, c.Dir, ""); err != nil {
 		return err
+	} else {
+		util.AssertNoErr(cmd.Wait())
 	}
 	return nil
+}
+
+func (c *ShareConf) Start(ctx context.Context, sockid string, clean bool) (*exec.Cmd, error) {
+	if sock, err := c.GetSock(sockid, clean); err != nil {
+		return nil, err
+	} else if cmd, err := util.StartVirtiofsd(ctx, "", sock, c.Name, c.Dir, ""); err != nil {
+		return nil, err
+	} else {
+		return cmd, nil
+	}
 }

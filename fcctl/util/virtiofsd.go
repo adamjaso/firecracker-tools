@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 )
 
 var DefaultVirtiofsdBin = "/usr/libexec/virtiofsd"
@@ -14,9 +15,13 @@ func init() {
 	}
 }
 
-func RunVirtiofsd(ctx context.Context, virtiofsdBin, socket, tag, dirname, additionalFlags string) error {
+func GetVirtiofsd(virtiofsdBin, socket, tag, dirname, additionalFlags string) string {
+	return fmt.Sprintf("%s --socket-path=%s --tag=%s --shared-dir=%s %s", virtiofsdBin, socket, tag, dirname, additionalFlags)
+}
+
+func StartVirtiofsd(ctx context.Context, virtiofsdBin, socket, tag, dirname, additionalFlags string) (*exec.Cmd, error) {
 	if virtiofsdBin == "" {
 		virtiofsdBin = DefaultVirtiofsdBin
 	}
-	return ExecCommand(ctx, fmt.Sprintf("%s --socket-path=%s --tag=%s --shared-dir=%s %s", virtiofsdBin, socket, tag, dirname, additionalFlags))
+	return StartCommand(ctx, GetVirtiofsd(virtiofsdBin, socket, tag, dirname, additionalFlags))
 }

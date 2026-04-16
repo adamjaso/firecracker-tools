@@ -34,6 +34,8 @@ var (
 	ErrSocketExists   = errors.New("socket exists")
 	ErrKernelNotFound = errors.New("kernel not found")
 	ErrInitrdNotFound = errors.New("initrd not found")
+	ErrInitrdExists   = errors.New("initrd exists")
+	ErrKernelExists   = errors.New("kernel exists")
 	ErrRootfsExists   = errors.New("tarball exists")
 	ErrChrootExists   = errors.New("script exists")
 	ErrFileExists     = errors.New("file exists")

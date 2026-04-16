@@ -7,8 +7,10 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"os/exec"
 	"strings"
 	"sync"
+	"syscall"
 
 	"fcctl/fclib"
 	"fcctl/util"
@@ -18,39 +20,34 @@ import (
 
 type (
 	VmCommand struct {
-		nameF   string
-		rootF   string
-		kernelF string
-		chrootF string
-		rootfsF string
-		diskF   string
-		sizeF   int
-		shareF  string
-		opts    util.VmOpts
+		nameF    string
+		kernelF  string
+		cmdlineF string
+		diskF    string
+		shareF   string
+		vcpuF    int64
+		memF     int64
+		tapF     string
+		metricsF string
+		mmdsF    bool
+		opts     util.VmOpts
 
 		cmdnameF string
 		argsF    []string
-		vm       *fclib.Conf
 	}
 )
 
 func (cmd *VmCommand) Parse() {
 	flag.StringVar(&cmd.nameF, "N", "", "Vm name")
-	flag.StringVar(&cmd.kernelF, "K", "", "Kernel name prefix")
-	flag.StringVar(&cmd.chrootF, "C", "", "Chroot script name")
-	flag.StringVar(&cmd.rootfsF, "R", "", "Rootfs tarball name")
+	flag.StringVar(&cmd.kernelF, "K", "", "Kernel name")
 	flag.StringVar(&cmd.diskF, "D", "", "Disk name")
-	flag.IntVar(&cmd.sizeF, "s", 4096, "Disk size")
-	flag.StringVar(&cmd.rootF, "root", "", "Custom disk file path (does not install to disks config dir)")
-	flag.Int64Var(&cmd.opts.Vcpu, "smp", 1, "Number of CPU")
-	flag.Int64Var(&cmd.opts.Mem, "m", 512, "VM memory in MiB")
-	flag.StringVar(&cmd.opts.TapDevice, "tap-device", "tap0/aa:bb:cc:dd:ee:ff", "Tap interface name")
-	flag.StringVar(&cmd.opts.KernelPath, "kernel", "./vmlinux", "Kernel vmlinux file path")
-	flag.StringVar(&cmd.opts.InitrdPath, "initrd", "", "Kernel initrd/initramfs file path")
-	flag.StringVar(&cmd.opts.Cmdline, "append", "rootfstype=ext4 rw console=ttyS0", "Kernel args to append")
-	flag.StringVar(&cmd.opts.MetricsPath, "metrics", "", "Metrics file path")
-	flag.BoolVar(&cmd.opts.EnableMMDS, "mmds", false, "Include MMDS config. Only valid with -tap-device")
-	flag.StringVar(&cmd.shareF, "share", "", "Include virtiofs shared directory config (vhost-user-device support required)")
+	flag.StringVar(&cmd.shareF, "S", "", "(optional) Include virtiofs shared directory config (virtiofsd required)")
+	flag.StringVar(&cmd.cmdlineF, "cmdline", "rootfstype=ext4 rw console=ttyS0", "(optional) Kernel cmdline")
+	flag.Int64Var(&cmd.vcpuF, "n", 1, "(optional) Number of vCPU")
+	flag.Int64Var(&cmd.memF, "m", 512, "(optional) VM memory in MiB")
+	flag.StringVar(&cmd.tapF, "tap-device", "tap0/aa:bb:cc:dd:ee:ff", "(optional) Tap interface name")
+	flag.StringVar(&cmd.metricsF, "metrics", "", "(optional) Metrics file path")
+	flag.BoolVar(&cmd.mmdsF, "mmds", false, "(optional) Include MMDS config. Only valid with -tap-device")
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, `usage: %s vm [CREATE_FLAGS|NAME [COMMAND [ARGS...]]]
 
@@ -63,6 +60,7 @@ func (cmd *VmCommand) Parse() {
        %[1]s vm NAME COMMAND - executes one of the following commands
 
 COMMAND
+
   start - starts the vm
   stop - stops the vm
   status - shows vm status
@@ -86,46 +84,62 @@ CREATE_FLAGS
 		cmd.cmdnameF = flag.Arg(1)
 		cmd.argsF = flag.Args()[1:]
 	}
-	cmd.vm = fclib.New(cmd.nameF)
 }
 
 func (cmd *VmCommand) Exec(ctx context.Context) {
 	if len(flag.Args()) < 1 {
 		flag.Usage()
 	}
+	vm := fclib.New(cmd.nameF)
 	if cmd.cmdnameF == "start" {
-		_ = util.RunFirecrackerCommand(ctx, cmd.vm.Sock, "stop")
-		util.AssertNoErr(util.WaitUntilState(ctx, cmd.vm.Sock, models.InstanceInfoStateNotStarted))
+		_ = util.RunFirecrackerCommand(ctx, vm.Sock, "stop")
+		util.AssertNoErr(util.WaitUntilState(ctx, vm.Sock, models.InstanceInfoStateNotStarted))
 		// try to cleanup
-		util.AssertNoErr(cmd.vm.Clean())
+		util.AssertNoErr(vm.Clean())
 	}
-	if err := cmd.vm.CheckSock(); err != nil {
-		util.AssertNoErr(util.RunFirecrackerCommand(ctx, cmd.vm.Sock, cmd.cmdnameF, cmd.argsF...))
+	if err := vm.CheckSock(); err != nil {
+		util.AssertNoErr(util.RunFirecrackerCommand(ctx, vm.Sock, cmd.cmdnameF, cmd.argsF...))
 		return
 	}
 	// no socket, vm is probably not running
 
-	wg := sync.WaitGroup{}
-	wg.Add(1) // one for firecracker
-	shares := cmd.vm.GetShares()
+	wgShareExit := sync.WaitGroup{} // wait for virtiofsd and vm to exit
+	shares := vm.GetShares()
+	shareCmds := make([]*exec.Cmd, len(shares))
 	if len(shares) > 0 {
-		for i := range shares {
-			wg.Add(1)
-			go func(share *ShareCommand) {
-				share.StartVirtiofs(ctx, cmd.vm.Name)
-				wg.Done()
-			}(&ShareCommand{share: shares[i]})
+		for i, share := range shares {
+			log.Printf("starting virtiofsd for share %q...", share.Name)
+			cmd, err := share.Start(ctx, vm.Name, false)
+			util.AssertNoErr(err)
+			shareCmds[i] = cmd
 		}
+		wgShareExit.Add(1)
+		go func() {
+			for i, cmd := range shareCmds {
+				share := shares[i]
+				if err := cmd.Wait(); err != nil {
+					log.Printf("exited virtiofsd for share %q with %d", share.Name, cmd.ProcessState.ExitCode())
+				} else {
+					log.Printf("exited virtiofsd for share %q", share.Name)
+				}
+			}
+			wgShareExit.Done()
+		}()
 	}
-	go func() {
-		log.Printf("starting vm %q from %q\n", cmd.vm.Name, cmd.vm.File)
-		builder := cmd.vm.GetVMCommandBuilder(fclib.FirecrackerBin)
-		b := builder.Build(ctx)
-		log.Printf("starting firecracker:\n\t%s\n", strings.Join(b.Args, " \\\n\t\t"))
-		util.AssertNoErr(b.Run())
-		wg.Done()
-	}()
-	wg.Wait()
+	log.Printf("starting firecracker for vm %q from %q\n", vm.Name, vm.File)
+	builder := vm.GetVMCommandBuilder(fclib.FirecrackerBin)
+	vmCmd := builder.Build(ctx)
+	log.Printf("firecracker command:\n\t%s\n", strings.Join(vmCmd.Args, " \\\n\t\t"))
+	if err := vmCmd.Run(); err != nil {
+		log.Printf("exited vm %q firecracker with %d", vm.Name, vmCmd.ProcessState.ExitCode())
+	} else {
+		log.Printf("exited vm %q firecracker", vm.Name)
+	}
+	for i, vmCmd := range shareCmds {
+		log.Printf("stopping virtiofsd for share %q", shares[i].Name)
+		_ = vmCmd.Process.Signal(syscall.SIGTERM)
+	}
+	wgShareExit.Wait()
 }
 
 func (cmd *VmCommand) List() {
@@ -133,46 +147,48 @@ func (cmd *VmCommand) List() {
 }
 
 func (cmd *VmCommand) Edit() {
-	util.EditFile(cmd.vm.File)
+	util.EditFile(fclib.New(cmd.nameF).File)
 }
 
 func (cmd *VmCommand) Install() {
-	cmd.opts.LogPath = cmd.vm.Log
-	if cmd.kernelF != "" {
-		kernel := fclib.NewKernel(cmd.kernelF)
-		util.AssertNoErr(kernel.CheckVmlinux())
-		cmd.opts.KernelPath = kernel.Vmlinux
-		if err := kernel.CheckInitrd(); err == nil {
-			cmd.opts.InitrdPath = kernel.Initrd
-		} else if !errors.Is(err, fclib.ErrInitrdNotFound) {
-			util.AssertNoErr(err)
-		}
+	if cmd.kernelF == "" || cmd.diskF == "" {
+		flag.Usage()
 	}
-	if cmd.chrootF != "" && cmd.rootfsF != "" && cmd.diskF != "" {
-		chroot := fclib.NewChroot(cmd.chrootF)
-		rootfs := fclib.NewRootfs(cmd.rootfsF)
-		disk := fclib.NewDisk(cmd.diskF)
-		ctx := context.Background()
-		util.AssertNoErr(fclib.BuildDisk(ctx, *rootfs, *chroot, *disk, cmd.sizeF))
-	} else if cmd.diskF != "" {
-		cmd.opts.DiskPath = fclib.NewDisk(cmd.diskF).File
-	} else if cmd.rootF != "" {
-		cmd.opts.DiskPath = cmd.rootF
-	} else {
-		util.AssertNoErr(errors.New("disk not found"))
+
+	vm := fclib.New(cmd.nameF)
+	if err := vm.CheckFile(); err != nil {
+		util.AssertNoErr(err)
 	}
+	kernel := fclib.NewKernel(cmd.kernelF)
+	util.AssertNoErr(kernel.HasVmlinux())
+	opts := util.VmOpts{
+		Vcpu:        cmd.vcpuF,
+		Mem:         cmd.memF,
+		TapDevice:   cmd.tapF,
+		MetricsPath: cmd.metricsF,
+		EnableMMDS:  cmd.mmdsF,
+		LogPath:     vm.Log,
+		DiskPath:    fclib.NewDisk(cmd.diskF).File,
+		Cmdline:     cmd.cmdlineF,
+		KernelPath:  kernel.Vmlinux,
+	}
+	if err := kernel.HasInitrd(); err == nil {
+		opts.InitrdPath = kernel.Initrd
+	} else if !errors.Is(err, fclib.ErrInitrdNotFound) {
+		util.AssertNoErr(err)
+	}
+
 	if cmd.shareF != "" {
 		log.Printf("WARNING! virtiofsd support is not yet a mainline firecracker feature. You will need to build Firecracker yourself from a fork that supports virtiofsd.")
 		share := fclib.NewShare(cmd.shareF)
-		cmd.opts.VirtiofsID = cmd.shareF
-		cmd.opts.VirtiofsSock, _ = share.GetSock(cmd.nameF, false)
+		opts.VirtiofsID = cmd.shareF
+		opts.VirtiofsSock, _ = share.GetSock(cmd.nameF, false)
 	}
-	if err := cmd.vm.CheckFile(); err != nil {
+
+	if vmConf, err := util.BuildVm(opts); err != nil {
 		util.AssertNoErr(err)
-	} else if vm, err := util.BuildVm(cmd.opts); err != nil {
-		util.AssertNoErr(err)
-	} else if err := cmd.vm.WriteVm(vm); err != nil {
+	} else if err := vm.WriteVm(vmConf); err != nil {
 		util.AssertNoErr(err)
 	}
-	log.Printf("wrote config to %s\n", cmd.vm.File)
+	log.Printf("wrote config to %s", vm.File)
 }

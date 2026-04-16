@@ -26,7 +26,6 @@ func (cmd *RootfsCommand) Parse() {
 	if name := flag.Arg(0); name != "" {
 		cmd.nameF = name
 	}
-	cmd.rootfs = fclib.NewRootfs(cmd.nameF)
 }
 
 func (cmd *RootfsCommand) Exec(ctx context.Context) {
@@ -34,7 +33,8 @@ func (cmd *RootfsCommand) Exec(ctx context.Context) {
 }
 
 func (cmd *RootfsCommand) Edit() {
-	util.ExecCommand(context.Background(), fmt.Sprintf("tar -tzvf %s", cmd.rootfs.Tarball))
+	rootfs := fclib.NewRootfs(cmd.nameF)
+	util.ExecCommand(context.Background(), fmt.Sprintf("tar -tzvf %s", rootfs.Tarball))
 }
 
 func (cmd *RootfsCommand) List() {
@@ -42,8 +42,9 @@ func (cmd *RootfsCommand) List() {
 }
 
 func (cmd *RootfsCommand) Install() {
-	util.AssertNoErr(cmd.rootfs.CheckTarball())
-	installFiles := [][2]string{{cmd.fileF, cmd.rootfs.Tarball}}
+	rootfs := fclib.NewRootfs(cmd.nameF)
+	util.AssertNoErr(rootfs.CheckTarball())
+	installFiles := [][2]string{{cmd.fileF, rootfs.Tarball}}
 	installData(nil, installFiles, nil)
 	log.Printf("installed rootfs %q", cmd.nameF)
 }
