@@ -28,7 +28,11 @@ func mainList(action, dir, suffix string) {
 	util.AssertNoErr(err)
 	for _, fn := range files {
 		name := strings.ReplaceAll(filepath.Base(fn), suffix, "")
-		fmt.Printf("%s\t%s\n", name, fn)
+		var size int64
+		if stat, err := os.Stat(fn); err == nil {
+			size = stat.Size()
+		}
+		fmt.Printf("%s\t%d\t%s\n", name, size, fn)
 	}
 }
 

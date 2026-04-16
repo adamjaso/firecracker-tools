@@ -23,6 +23,25 @@ func ExecCommand(ctx context.Context, command string) error {
 	return cmd.Run()
 }
 
+func ExecCompress(ctx context.Context, flags, src, dst string) error {
+	// ensure outfile does not exist, to avoid accidental or malicious file overwriting
+	if _, err := os.Stat(dst); err == nil {
+		return fmt.Errorf("compress output file %s exists, refusing to overwrite", dst)
+	} else if !os.IsNotExist(err) {
+		return err
+	}
+	out, err := os.OpenFile(dst, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o644)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+	cmd := exec.CommandContext(ctx, "gzip", flags, src)
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = out
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
+}
+
 func ExecCommands(ctx context.Context, commands ...string) error {
 	for _, command := range commands {
 		if err := ExecCommand(ctx, command); err != nil {

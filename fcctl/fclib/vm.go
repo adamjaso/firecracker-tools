@@ -2,7 +2,6 @@ package fclib
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
 
@@ -11,38 +10,8 @@ import (
 	"github.com/firecracker-microvm/firecracker-go-sdk"
 )
 
-const (
-	DefaultConfdir   = "/var/lib/firecracker/conf"
-	DefaultDiskdir   = "/var/lib/firecracker/disk"
-	DefaultKerneldir = "/var/lib/firecracker/kernel"
-	DefaultSharedir  = "/var/lib/firecracker/share"
-	DefaultLogdir    = "/var/log/firecracker"
-	DefaultRundir    = "/var/run/firecracker"
-)
-
-var (
-	dirs = []string{
-		DefaultConfdir,
-		DefaultDiskdir,
-		DefaultKerneldir,
-		DefaultSharedir,
-		DefaultLogdir,
-		DefaultRundir,
-	}
-
-	ErrConfigExists   = errors.New("config exists")
-	ErrSocketExists   = errors.New("socket exists")
-	ErrKernelNotFound = errors.New("kernel not found")
-	ErrInitrdNotFound = errors.New("initrd not found")
-	ErrInitrdExists   = errors.New("initrd exists")
-	ErrKernelExists   = errors.New("kernel exists")
-	ErrRootfsExists   = errors.New("tarball exists")
-	ErrChrootExists   = errors.New("script exists")
-	ErrFileExists     = errors.New("file exists")
-)
-
 type (
-	Conf struct {
+	VmConf struct {
 		Name string `json:"_name,omitempty"`
 		Sock string `json:"_sock,omitempty"`
 		Log  string `json:"_log,omitempty"`
@@ -50,31 +19,8 @@ type (
 	}
 )
 
-func InitConfdirs() error {
-	for _, dir := range dirs {
-		if err := os.MkdirAll(dir, 0o755); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func checkFile(file, name string, existErr, notExistErr error) error {
-	if _, err := os.Stat(file); err == nil {
-		if existErr != nil {
-			return fmt.Errorf("%w: %s %s", existErr, name, file)
-		}
-		return nil
-	} else if !os.IsNotExist(err) {
-		return fmt.Errorf("%w: %s %s", err, name, file)
-	} else if notExistErr != nil {
-		return notExistErr
-	}
-	return nil
-}
-
-func New(name string) *Conf {
-	return &Conf{
+func NewVm(name string) *VmConf {
+	return &VmConf{
 		Name: name,
 		Sock: fmt.Sprintf("%s/%s.sock", DefaultRundir, name),
 		Log:  fmt.Sprintf("%s/%s.log", DefaultLogdir, name),
@@ -82,7 +28,7 @@ func New(name string) *Conf {
 	}
 }
 
-func (c *Conf) GetShares() []*ShareConf {
+func (c *VmConf) GetShares() []*ShareConf {
 	vm, _ := c.ReadVm()
 	shares := make([]*ShareConf, 0)
 	if vm == nil {
@@ -94,15 +40,15 @@ func (c *Conf) GetShares() []*ShareConf {
 	return shares
 }
 
-func (c *Conf) CheckFile() error {
+func (c *VmConf) CheckFile() error {
 	return checkFile(c.File, "file", ErrConfigExists, nil)
 }
 
-func (c *Conf) CheckSock() error {
+func (c *VmConf) CheckSock() error {
 	return checkFile(c.Sock, "sock", ErrSocketExists, nil)
 }
 
-func (c *Conf) GetVMCommandBuilder(firecrackerBin string) firecracker.VMCommandBuilder {
+func (c *VmConf) GetVMCommandBuilder(firecrackerBin string) firecracker.VMCommandBuilder {
 	return firecracker.VMCommandBuilder{}.
 		WithBin(firecrackerBin).
 		WithStdin(os.Stdin).
@@ -112,7 +58,7 @@ func (c *Conf) GetVMCommandBuilder(firecrackerBin string) firecracker.VMCommandB
 		WithArgs([]string{"--config-file", c.File, "--id", c.Name})
 }
 
-func (c *Conf) WriteVm(vm *util.VmConfFile) error {
+func (c *VmConf) WriteVm(vm *util.VmConfFile) error {
 	if err := c.CheckFile(); err != nil {
 		return err
 	}
@@ -129,7 +75,7 @@ func (c *Conf) WriteVm(vm *util.VmConfFile) error {
 	return nil
 }
 
-func (c *Conf) ReadVm() (*util.VmConfFile, error) {
+func (c *VmConf) ReadVm() (*util.VmConfFile, error) {
 	f, err := os.Open(c.File)
 	if err != nil {
 		return nil, err
@@ -142,7 +88,7 @@ func (c *Conf) ReadVm() (*util.VmConfFile, error) {
 	return conf, nil
 }
 
-func (c *Conf) Clean() error {
+func (c *VmConf) Clean() error {
 	// try to cleanup socket
 	if err := cleanupFile(c.Sock); err != nil {
 		return err

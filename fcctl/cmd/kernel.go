@@ -15,8 +15,6 @@ type (
 		kernelF string
 		initrdF string
 		configF string
-
-		kernel *fclib.KernelConf
 	}
 )
 

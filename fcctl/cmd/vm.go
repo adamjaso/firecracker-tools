@@ -10,7 +10,6 @@ import (
 	"os/exec"
 	"strings"
 	"sync"
-	"syscall"
 
 	"fcctl/fclib"
 	"fcctl/util"
@@ -24,13 +23,13 @@ type (
 		kernelF  string
 		cmdlineF string
 		diskF    string
+		imageF   string
 		shareF   string
 		vcpuF    int64
 		memF     int64
 		tapF     string
 		metricsF string
 		mmdsF    bool
-		opts     util.VmOpts
 
 		cmdnameF string
 		argsF    []string
@@ -40,6 +39,7 @@ type (
 func (cmd *VmCommand) Parse() {
 	flag.StringVar(&cmd.nameF, "N", "", "Vm name")
 	flag.StringVar(&cmd.kernelF, "K", "", "Kernel name")
+	flag.StringVar(&cmd.imageF, "I", "", "Image name")
 	flag.StringVar(&cmd.diskF, "D", "", "Disk name")
 	flag.StringVar(&cmd.shareF, "S", "", "(optional) Include virtiofs shared directory config (virtiofsd required)")
 	flag.StringVar(&cmd.cmdlineF, "cmdline", "rootfstype=ext4 rw console=ttyS0", "(optional) Kernel cmdline")
@@ -51,13 +51,15 @@ func (cmd *VmCommand) Parse() {
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, `usage: %s vm [CREATE_FLAGS|NAME [COMMAND [ARGS...]]]
 
-       %[1]s vm - lists existing configs
+       %[1]s vm - lists existing vm configs
 
-       %[1]s vm CREATE_FLAGS - creates a new vm config from the CREATE_FLAGS
+       %[1]s vm CREATE_FLAGS - creates a new vm config from the CREATE_FLAGS.
+                               If image is provided, then a disk will be auto created,
+			       otherwise a disk is required.
 
-       %[1]s vm NAME - opens the config for editing
+       %[1]s vm NAME - opens the firecracker vm config for editing
 
-       %[1]s vm NAME COMMAND - executes one of the following commands
+       %[1]s vm NAME COMMAND [ARGS] - executes one of the following commands
 
 COMMAND
 
@@ -90,7 +92,8 @@ func (cmd *VmCommand) Exec(ctx context.Context) {
 	if len(flag.Args()) < 1 {
 		flag.Usage()
 	}
-	vm := fclib.New(cmd.nameF)
+	ctx, cancel := context.WithCancel(ctx)
+	vm := fclib.NewVm(cmd.nameF)
 	if cmd.cmdnameF == "start" {
 		_ = util.RunFirecrackerCommand(ctx, vm.Sock, "stop")
 		util.AssertNoErr(util.WaitUntilState(ctx, vm.Sock, models.InstanceInfoStateNotStarted))
@@ -99,6 +102,7 @@ func (cmd *VmCommand) Exec(ctx context.Context) {
 	}
 	if err := vm.CheckSock(); err != nil {
 		util.AssertNoErr(util.RunFirecrackerCommand(ctx, vm.Sock, cmd.cmdnameF, cmd.argsF...))
+		cancel()
 		return
 	}
 	// no socket, vm is probably not running
@@ -135,10 +139,7 @@ func (cmd *VmCommand) Exec(ctx context.Context) {
 	} else {
 		log.Printf("exited vm %q firecracker", vm.Name)
 	}
-	for i, vmCmd := range shareCmds {
-		log.Printf("stopping virtiofsd for share %q", shares[i].Name)
-		_ = vmCmd.Process.Signal(syscall.SIGTERM)
-	}
+	cancel() // cause the virtiofsd processes to exit
 	wgShareExit.Wait()
 }
 
@@ -147,17 +148,28 @@ func (cmd *VmCommand) List() {
 }
 
 func (cmd *VmCommand) Edit() {
-	util.EditFile(fclib.New(cmd.nameF).File)
+	util.EditFile(fclib.NewVm(cmd.nameF).File)
 }
 
 func (cmd *VmCommand) Install() {
-	if cmd.kernelF == "" || cmd.diskF == "" {
+	if cmd.kernelF == "" && cmd.diskF == "" {
 		flag.Usage()
 	}
 
-	vm := fclib.New(cmd.nameF)
+	vm := fclib.NewVm(cmd.nameF)
 	if err := vm.CheckFile(); err != nil {
 		util.AssertNoErr(err)
+	}
+	var disk *fclib.DiskConf
+	if cmd.diskF != "" {
+		disk = fclib.NewDisk(cmd.diskF)
+	} else if cmd.imageF != "" {
+		image := fclib.NewImage(cmd.imageF)
+		newdiskName := fmt.Sprintf("vm-auto-%s-%s", vm.Name, image.Name)
+		disk = fclib.NewDisk(newdiskName)
+		util.AssertNoErr(disk.CheckFile())
+		log.Printf("auto creating disk %q from image %q", newdiskName, image.Name)
+		util.AssertNoErr(disk.InstallFromImage(context.Background(), image))
 	}
 	kernel := fclib.NewKernel(cmd.kernelF)
 	util.AssertNoErr(kernel.HasVmlinux())
@@ -168,7 +180,7 @@ func (cmd *VmCommand) Install() {
 		MetricsPath: cmd.metricsF,
 		EnableMMDS:  cmd.mmdsF,
 		LogPath:     vm.Log,
-		DiskPath:    fclib.NewDisk(cmd.diskF).File,
+		DiskPath:    disk.File,
 		Cmdline:     cmd.cmdlineF,
 		KernelPath:  kernel.Vmlinux,
 	}
