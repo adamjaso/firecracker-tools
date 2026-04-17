@@ -3,7 +3,6 @@ package cmd
 import (
 	"context"
 	"flag"
-	"fmt"
 	"log"
 
 	"fcctl/fclib"
@@ -25,9 +24,10 @@ func (cmd *DiskCommand) Edit() {
 }
 
 func (cmd *DiskCommand) Exec(ctx context.Context) {
-	disk := fclib.NewDisk(cmd.nameF)
-	mountAndShell := fmt.Sprintf(`mount %[2]s %[3]s && cd %[3]s && env PS1="[disk %[1]s] $PS1" bash`, disk.Name, disk.File, "/mnt")
-	util.AssertNoErr(util.ExecCommand(context.Background(), mountAndShell))
+	util.AssertNoErr(errUnknownCommand)
+	// disk := fclib.NewDisk(cmd.nameF)
+	// mountAndShell := fmt.Sprintf(`mount %[2]s %[3]s && cd %[3]s && env PS1="[disk %[1]s] $PS1" bash`, disk.Name, disk.File, "/mnt")
+	// util.AssertNoErr(util.ExecCommand(context.Background(), mountAndShell))
 }
 
 func (cmd *DiskCommand) List() {

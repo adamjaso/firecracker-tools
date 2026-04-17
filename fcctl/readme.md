@@ -20,9 +20,9 @@ Run the binary `./fcctl -h` and inspect the help flags. Specifying a subcommand 
 The configs that `fcctl` manages are as follows.
 
 - Rootfs:
-    - config: `/var/lib/firecracker/*.rootfs.tar.gz`
+    - config: `/var/lib/firecracker/conf/*.rootfs.tar.gz`
 - Chroots:
-    - script: `/var/lib/firecracker/*.chroot.sh`]
+    - script: `/var/lib/firecracker/conf/*.chroot.sh`]
     - mount: `/var/run/firecracker/*.chroot`
 - Disks:
     - raw disk image: `/var/lib/firecracker/disk/*.img`
@@ -30,6 +30,10 @@ The configs that `fcctl` manages are as follows.
     - kernel binary: `/var/lib/firecracker/kernel/*.vmlinux`
     - kernel config: `/var/lib/firecracker/kernel/*.config`
     - optional initrd: `/var/lib/firecracker/kernel/*.initrd`
+- Images: `/var/lib/firecracker/image/*`
+    - image file:  `/var/lib/firecracker/image/*.img.gz`
+- Shares: `/var/lib/firecracker/share/*`
+    - share directory:  `/var/lib/firecracker/share/*.share`
 - VMs: `/var/lib/conf/firecracker/*.json`
     - vm config: `/var/lib/firecracker/conf/*.json`
     - vm socket: `/var/run/firecracker/*.sock`
@@ -44,6 +48,11 @@ This `rootfs` can be as simple as the [Alpine Linux](https://alpinelinux.org/dow
 A `chroot` is a shell script that executes inside a directory that has been pre-populated with the contents of a `rootfs` tarball.
 The `chroot` shell script customizes the rootfs to prepare a root disk for booting in a Firecracker VM.
 
+### Images
+
+An `image` is a compressed snapshot of a `disk`. It is intended to be a base image for creating VMs. For example, when creating a 
+new VM, the user can reference an image `-I` which will be used to auto-create a new disk for the VM.
+
 ### Disks
 
 A `disk` is a bootable root disk that can be booted by a Firecracker VM. It is an `ext4` formatted raw disk image i.e. `dd if=/dev/zero`
@@ -57,6 +66,8 @@ A disk is constructed from a `rootfs` and `chroot` by
 4. extracting a `rootfs` into the mount
 5. running a `chroot` script in the mount with `chroot` command
 6. unmount the disk image
+
+A disk can also be created by decompressing an `image`.
 
 ### Kernels
 
@@ -83,3 +94,11 @@ The `vm` command provides a command to stop the VM using the Firecracker unix so
 The `vm` command provides a command to curl the VM Firecracker unix socket with a custom HTTP method, URL path, and body.
 
 Valid HTTP parameters can be found in the [Firecracker Swagger docs](https://github.com/firecracker-microvm/firecracker-go-sdk/blob/main/client/swagger.yaml#L30).
+
+### Shares
+
+A `share` is a shared directory with the Firecracker VM. This is currently only possible using a forked version of Firecracker [^1]
+which has added support for `virtiofsd`. `fcctl` supports starting the `virtiofsd` daemon to enable host/guest directory sharing.
+The forked version of Firecracker supporting this feature is currently pending review.
+
+[^1]: [Firecracker fork supporting virtiofsd](https://github.com/firecracker-microvm/firecracker/pull/5773)
