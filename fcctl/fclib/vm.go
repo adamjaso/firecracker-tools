@@ -55,7 +55,8 @@ func (c *VmConf) GetVMCommandBuilder(firecrackerBin string) firecracker.VMComman
 		WithStdout(os.Stdout).
 		WithStderr(os.Stderr).
 		WithSocketPath(c.Sock).
-		WithArgs([]string{"--config-file", c.File, "--id", c.Name})
+		//"--config-file", c.File,
+		WithArgs([]string{"--id", c.Name})
 }
 
 func (c *VmConf) WriteVm(vm *util.VmConfFile) error {

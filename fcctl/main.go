@@ -12,7 +12,7 @@ import (
 )
 
 func showHelp() {
-	fmt.Fprintf(os.Stderr, "usage: %s rootfs|chroot|kernel|disk|image|share|vm [FLAGS]\n", fclib.Progname)
+	fmt.Fprintf(os.Stderr, "usage: %s rootfs|chroot|kernel|disk|image|share|net|vm [FLAGS]\n", fclib.Progname)
 	os.Exit(1)
 }
 
@@ -59,6 +59,8 @@ func main() {
 		c = &cmd.ShareCommand{}
 	case "image":
 		c = &cmd.ImageCommand{}
+	case "net":
+		c = &cmd.NetCommand{}
 	default:
 		showHelp()
 	}

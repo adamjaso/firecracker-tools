@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/firecracker-microvm/firecracker-go-sdk/client/models"
 )
@@ -47,6 +48,7 @@ type (
 	VmConfFile struct {
 		models.FullVMConfiguration
 		VHostUserDevices []VHostUserDevice `json:"vhost-user-devices,omitempty"`
+		CreatedAt        int64             `json:"_created_at"` // used for sorting
 	}
 )
 
@@ -68,6 +70,7 @@ func BuildVm(opts VmOpts) (*VmConfFile, error) {
 	diskF, _ := filepath.Abs(opts.DiskPath)
 	logF, _ := filepath.Abs(opts.LogPath)
 	cfg := VmConfFile{
+		CreatedAt: time.Now().Unix(),
 		FullVMConfiguration: models.FullVMConfiguration{
 			BootSource: &models.BootSource{
 				KernelImagePath: &kernelF,

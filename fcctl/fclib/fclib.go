@@ -13,6 +13,7 @@ const (
 	DefaultKerneldir = "/var/lib/firecracker/kernel"
 	DefaultSharedir  = "/var/lib/firecracker/share"
 	DefaultImagedir  = "/var/lib/firecracker/image"
+	DefaultNetdir    = "/var/lib/firecracker/net"
 	DefaultLogdir    = "/var/log/firecracker"
 	DefaultRundir    = "/var/run/firecracker"
 )
@@ -24,6 +25,7 @@ var (
 		DefaultKerneldir,
 		DefaultSharedir,
 		DefaultImagedir,
+		DefaultNetdir,
 		DefaultLogdir,
 		DefaultRundir,
 	}

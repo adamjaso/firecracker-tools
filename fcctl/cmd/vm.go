@@ -107,6 +107,17 @@ func (cmd *VmCommand) Exec(ctx context.Context) {
 	}
 	// no socket, vm is probably not running
 
+	// TODO: support network configs
+	// vmConf, err := vm.ReadVm()
+	// util.AssertNoErr(err)
+
+	// nets, err := fclib.ScanNets("")
+	// util.AssertNoErr(err)
+
+	// vmConf.NetworkInterfaces = append(vmConf.NetworkInterfaces, nets.GetVmNetworkInterface(vm.Name)...)
+	// vmBytes, err := json.Marshal(vmConf)
+	// util.AssertNoErr(err)
+
 	wgShareExit := sync.WaitGroup{} // wait for virtiofsd and vm to exit
 	shares := vm.GetShares()
 	shareCmds := make([]*exec.Cmd, len(shares))
